@@ -14,6 +14,12 @@ const REAL_VIEWPORT_WIDTH : Double = VIEWPORT_WIDTH * ZOOM
 const REAL_VIEWPORT_HEIGHT : Double = VIEWPORT_HEIGHT * ZOOM
 
 ///|
+const MOVE_SPEED : Double = 150.0
+
+///|
+let player_ref : Ref[@system.Entity?] = { val: None }
+
+///|
 fn main {
   @system.App::new()
   .with_canvas_width(REAL_VIEWPORT_WIDTH)
@@ -24,15 +30,41 @@ fn main {
   .add_plugin(@plugins.default_plugin)
   .add_system(game_start, schedule=Startup)
   .add_system(tick, schedule=Update)
+  .add_system(player_move_system, schedule=Update)
   .run()
 }
 
 ///|
 fn game_start(_delta : Double) -> Unit {
-
+  let entity = @system.Entity::new()
+  @sprite.sprites.set(
+    entity,
+    @sprite.Sprite::from_color_rect(
+      @sprite.ColorRect::new(@math.Vec2D(32.0, 32.0), "white"),
+      0,
+    ),
+  )
+  @position.positions.set(entity, @math.Vec2D(50.0, 50.0))
+  player_ref.val = Some(entity)
 }
 
 ///|
 fn tick(_delta : Double) -> Unit {
 
+}
+
+///|
+fn player_move_system(delta : Double) -> Unit {
+  guard player_ref.val is Some(e) else { return }
+  guard @position.positions.get(e) is Some(pos) else { return }
+  let dir = @inputs.key_vector(
+    @inputs.KeyW,
+    @inputs.KeyS,
+    @inputs.KeyA,
+    @inputs.KeyD,
+  )
+  if dir != @math.Vec2D::zero() {
+    let new_pos = pos.0 + dir.normalize().scalar_mul(MOVE_SPEED * delta)
+    @position.positions.set(e, new_pos)
+  }
 }
