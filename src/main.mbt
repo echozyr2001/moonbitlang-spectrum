@@ -36,16 +36,10 @@ fn main {
 
 ///|
 fn game_start(_delta : Double) -> Unit {
-  let entity = @system.Entity::new()
-  @sprite.sprites.set(
-    entity,
-    @sprite.Sprite::from_color_rect(
-      @sprite.ColorRect::new(@math.Vec2D(32.0, 32.0), "white"),
-      0,
-    ),
+  let p = spawn_player(
+    @math.Vec2D(REAL_VIEWPORT_WIDTH / 2.0, REAL_VIEWPORT_HEIGHT / 2.0),
   )
-  @position.positions.set(entity, @math.Vec2D(50.0, 50.0))
-  player_ref.val = Some(entity)
+  player_ref.val = Some(p)
 }
 
 ///|
