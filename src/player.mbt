@@ -24,5 +24,29 @@ pub fn spawn_player(pos : @math.Vec2D) -> @system.Entity {
   )
   @sprite.sprites.set(e, sprite)
   @position.positions.set(e, pos)
+
+  // Set up collision for player
+  @collision.collision_layers.set(e, player_collision_layer)
+  @collision.shapes.set(
+    e,
+    @collision.CollisionShape::Rect(
+      size=@math.Vec2D(tile_size * 8.0, tile_size * 8.0),
+      offset=@math.Vec2D(-tile_size * 4.0, -tile_size * 4.0),
+    ),
+  )
+
+  // Set up area for light collection
+  let collection_area = @collision.Area::new(
+    @collision.CollisionMask::new([light_collision_layer]),
+  )
+  collection_area.on_enter(fn(light_entity) {
+    if @collision.collision_layers.get(light_entity) ==
+      Some(light_collision_layer) {
+      // Collect light and add to score
+      game_state.score += 1
+      light_entity.destroy()
+    }
+  })
+  @collision.areas.set(e, collection_area)
   e
 }
