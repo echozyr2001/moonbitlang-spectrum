@@ -50,5 +50,10 @@ pub fn spawn_player(pos : @math.Vec2D) -> @system.Entity {
   @collision.areas.set(e, collection_area)
   // add health component for player
   add_health(e, 3)
+  // give a short invulnerability immediately after spawn to avoid instant collisions
+  set_invulnerability(e, 1.0)
+  println(
+    "spawn_player: set invulnerability for player entity=" + e.to_string(),
+  )
   e
 }

@@ -15,7 +15,7 @@ struct HealthEntry {
   mut invuln_timer : Double
   mut flash_timer : Double
   mut knockback : @math.Vec2D
-  base_sprite : @sprite.Sprite?
+  _base_sprite : @sprite.Sprite?
 }
 
 ///|
@@ -41,19 +41,49 @@ pub fn add_health(entity : @system.Entity, max_health : Int) -> Unit {
     invuln_timer: 0.0,
     flash_timer: 0.0,
     knockback: @math.Vec2D(0.0, 0.0),
-    base_sprite,
+    _base_sprite: base_sprite,
   }
   health_components.val.push(entry)
+  // Debug: announce new health entry
+  println(
+    "add_health: entity=" +
+    entity.to_string() +
+    " health=" +
+    max_health.to_string(),
+  )
+}
+
+///|
+// Make an entity invulnerable for a short duration (useful after spawn)
+pub fn set_invulnerability(entity : @system.Entity, duration : Double) -> Unit {
+  let idx = find_entry_idx(entity)
+  if idx < 0 {
+    return
+  }
+  health_components.val[idx].invuln_timer = duration
+  // if this is the player entity, also set the global player invuln timer used elsewhere
+  guard game_state.player_entity is Some(pe) else { () }
+  if pe == entity {
+    game_state.player_invuln_timer = duration
+  }
+  println(
+    "set_invulnerability: entity=" +
+    entity.to_string() +
+    " idx=" +
+    idx.to_string() +
+    " dur=" +
+    duration.to_string(),
+  )
 }
 
 ///|
 fn find_entry_idx(entity : @system.Entity) -> Int {
   let mut i = 0
-  for entry in health_components.val {
-    if entry.entity == entity {
+  while i < health_components.val.length() {
+    if health_components.val[i].entity == entity {
       return i
     }
-    i += 1
+    i = i + 1
   }
   -1
 }
@@ -68,32 +98,53 @@ pub fn take_damage(
   if idx < 0 {
     return
   }
-  let mut entry = health_components.val[idx]
-  if entry.invuln_timer > 0.0 {
+  println(
+    "take_damage: entity=" +
+    entity.to_string() +
+    " idx=" +
+    idx.to_string() +
+    " invuln=" +
+    health_components.val[idx].invuln_timer.to_string() +
+    " amount=" +
+    amount.to_string(),
+  )
+  // check per-entity invuln
+  if health_components.val[idx].invuln_timer > 0.0 {
+    println(
+      "take_damage: ignored due per-entity invuln for entity=" +
+      entity.to_string(),
+    )
     return
   }
-  let mut new_health = entry.health - amount
+  // also respect global player invulnerability (defensive)
+  guard game_state.player_entity is Some(pe) else { () }
+  if pe == entity && game_state.player_invuln_timer > 0.0 {
+    println("take_damage: ignored due to global player_invuln_timer")
+    return
+  }
+
+  // apply damage directly
+  let mut new_health = health_components.val[idx].health - amount
   if new_health < 0 {
     new_health = 0
   }
-  entry.health = new_health
-  entry.took_damage = true
-  entry._last_damage = amount
-  entry.invuln_timer = 1.0
-  entry.flash_timer = 0.2
+  health_components.val[idx].health = new_health
+  health_components.val[idx].took_damage = true
+  health_components.val[idx]._last_damage = amount
+  health_components.val[idx].invuln_timer = 1.0
+  health_components.val[idx].flash_timer = 0.2
   match source_pos {
     Some(sp) => {
       guard @position.positions.get(entity) is Some(ent_pos) else { () }
       let dir = (ent_pos.0 - sp).normalize()
-      entry.knockback = dir.scalar_mul(200.0)
-      @velocity.velocities.set(entity, entry.knockback)
-
-      // clear knockback after 0.15s
+      let kb = dir.scalar_mul(200.0)
+      health_components.val[idx].knockback = kb
+      @velocity.velocities.set(entity, kb)
       @system.timeout(0.15, true, fn() {
         @velocity.velocities.set(entity, @math.Vec2D(0.0, 0.0))
       })
 
-      // spawn a small hit flash at entity position (uses heart-ui texture)
+      // flash
       let flash_ent = @system.Entity::new()
       @position.positions.set(flash_ent, ent_pos.0)
       let tile_size : Double = 8.0
@@ -115,10 +166,6 @@ pub fn take_damage(
     }
     None => ()
   }
-
-  // touch the variable to ensure mutability is considered used
-  entry = entry
-  health_components.val[idx] = entry
 }
 
 ///|

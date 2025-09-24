@@ -199,8 +199,18 @@ fn game_start(_delta : Double) -> Unit {
   player_ref.val = Some(p)
   game_state.player_entity = Some(p)
 
-  // Initialize first wave
-  start_wave()
+  // Ensure global player health matches max at start
+  game_state.player_health = game_state.player_max_health
+  println(
+    "game_start: player spawned, health=" + game_state.player_health.to_string(),
+  )
+  // Give player a short invulnerability window to avoid instant death on spawn
+  set_invulnerability(p, 1.0)
+  println("game_start: player invulnerable for 1.0s")
+
+  // Initialize first wave after a short delay so the player has time to be invulnerable
+  // Increased to 1.0s to give a safer startup window
+  @system.timeout(1.0, true, fn() { start_wave() })
   // Initialize UI layer
   @Scenes.init_scene_ui(0.0)
 }
@@ -328,6 +338,10 @@ fn enemy_shooting_system(_delta : Double) -> Unit {
   guard game_state.player_entity is Some(player) else { return }
   guard player.is_alive() else { return }
   guard @position.positions.get(player) is Some(player_pos) else { return }
+  // Don't let enemies shoot while the player is invulnerable at startup
+  if game_state.player_invuln_timer > 0.0 {
+    return
+  }
   for enemy in game_state.enemies {
     if enemy.is_alive() {
       // Check if this is a shooter enemy (we'll store type in a component later)
@@ -415,6 +429,10 @@ fn enemy_ai_system(_delta : Double) -> Unit {
 
 ///|
 fn enemy_spawn_system(delta : Double) -> Unit {
+  // If player is invulnerable at startup, delay spawning entirely
+  if game_state.player_invuln_timer > 0.0 {
+    return
+  }
   // Only spawn enemies during active wave and if we haven't spawned all enemies
   if game_state.wave_enemies_remaining <= 0 || game_state.wave_complete {
     return
@@ -432,13 +450,34 @@ fn enemy_spawn_system(delta : Double) -> Unit {
   if game_state.wave_spawn_timer >= actual_spawn_interval {
     game_state.wave_spawn_timer = 0.0
     let side = (random() * 4.0).to_int()
-    let spawn_pos = match side {
+    let mut spawn_pos = match side {
       0 => @math.Vec2D(-20.0, random() * REAL_VIEWPORT_HEIGHT) // Left edge
       1 =>
         @math.Vec2D(REAL_VIEWPORT_WIDTH + 20.0, random() * REAL_VIEWPORT_HEIGHT) // Right edge
       2 => @math.Vec2D(random() * REAL_VIEWPORT_WIDTH, -20.0) // Top edge
       _ =>
         @math.Vec2D(random() * REAL_VIEWPORT_WIDTH, REAL_VIEWPORT_HEIGHT + 20.0) // Bottom edge
+    }
+
+    // Prevent spawning enemies too close to the player (avoid instant collisions)
+    let safe_spawn_distance : Double = 80.0
+    guard game_state.player_entity is Some(player) else { () }
+    if @position.positions.get(player) is Some(player_pos) {
+      // If spawn_pos is within SAFE_SPAWN_DISTANCE of player, move it outwards
+      let to_player = spawn_pos - player_pos.0
+      let dx = to_player[X]
+      let dy = to_player[Y]
+      let dist_sq = dx * dx + dy * dy
+      let min_sq = safe_spawn_distance * safe_spawn_distance
+      if dist_sq < min_sq {
+        // If direction is zero (unlikely), nudge to left of player
+        let new_pos = if to_player == @math.Vec2D::zero() {
+          @math.Vec2D(player_pos.0[X] - safe_spawn_distance, player_pos.0[Y])
+        } else {
+          player_pos.0 + to_player.normalize().scalar_mul(safe_spawn_distance)
+        }
+        spawn_pos = new_pos
+      }
     }
 
     // Choose enemy type based on wave
@@ -542,6 +581,12 @@ fn spawn_enemy_bullet(
       bullet.destroy()
       // use Health component API to apply damage; source position is bullet position
       guard @position.positions.get(bullet) is Some(bpos) else { return }
+      // respect global player invulnerability as an extra guard
+      guard game_state.player_entity is Some(pe) else { return }
+      if pe == target_entity && game_state.player_invuln_timer > 0.0 {
+        // skip damage while player is invulnerable
+        return
+      }
       take_damage(target_entity, 1, Some(bpos.0))
     }
   })
