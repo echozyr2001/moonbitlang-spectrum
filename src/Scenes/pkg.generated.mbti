@@ -1,0 +1,20 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "echozyr2001/spectrum/Scenes"
+
+// Values
+fn enter_game_scene(Double) -> Unit
+
+fn exit_game_scene(Double) -> Unit
+
+fn init_scene_ui(Double) -> Unit
+
+fn update_hud(Int, Int, Int) -> Unit
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
+

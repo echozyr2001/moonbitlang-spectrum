@@ -2,16 +2,36 @@
 package "echozyr2001/spectrum"
 
 import(
+  "Milky2018/selene/collision"
   "Milky2018/selene/math"
   "Milky2018/selene/system"
 )
 
 // Values
+let bullet_collision_layer : @collision.CollisionLayer
+
+let enemy_bullet_collision_layer : @collision.CollisionLayer
+
+let enemy_collision_layer : @collision.CollisionLayer
+
+let game_state : GameState
+
+fn get_player_health() -> Int
+
+fn get_score() -> Int
+
+let light_collision_layer : @collision.CollisionLayer
+
+let player_collision_layer : @collision.CollisionLayer
+
 fn spawn_player(@math.Vec2D) -> @system.Entity
 
 // Errors
 
 // Types and methods
+type EnemyType
+
+type GameState
 
 // Type aliases
 
