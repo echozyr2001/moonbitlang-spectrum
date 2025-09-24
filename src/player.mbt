@@ -48,5 +48,7 @@ pub fn spawn_player(pos : @math.Vec2D) -> @system.Entity {
     }
   })
   @collision.areas.set(e, collection_area)
+  // add health component for player
+  add_health(e, 3)
   e
 }

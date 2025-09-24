@@ -61,6 +61,7 @@ struct GameState {
   player_max_health : Int
   player_damage_multiplier : Double
   player_speed_multiplier : Double
+  mut player_invuln_timer : Double
 }
 
 ///|
@@ -84,6 +85,34 @@ pub let game_state : GameState = {
   player_max_health: 3,
   player_damage_multiplier: 1.0,
   player_speed_multiplier: 1.0,
+  player_invuln_timer: 0.0,
+}
+
+///|
+// Simple enemy info component to store type-specific values like speed
+struct EnemyInfo {
+  _entity : @system.Entity
+  speed : Double
+}
+
+///|
+let enemy_infos : Ref[Array[EnemyInfo]] = { val: [] }
+
+///|
+pub fn set_enemy_info(entity : @system.Entity, speed : Double) -> Unit {
+  enemy_infos.val.push({ _entity: entity, speed })
+}
+
+///|
+fn find_enemy_info(entity : @system.Entity) -> Int {
+  let mut i = 0
+  while i < enemy_infos.val.length() {
+    if enemy_infos.val[i]._entity == entity {
+      return i
+    }
+    i = i + 1
+  }
+  -1
 }
 
 ///|
@@ -91,6 +120,26 @@ pub let game_state : GameState = {
 // without accessing package-level mutable vars directly.
 pub fn get_player_health() -> Int {
   game_state.player_health
+}
+
+///|
+pub fn get_wave_enemies_spawned() -> Int {
+  game_state.wave_enemies_spawned
+}
+
+///|
+pub fn get_upgrade_points() -> Int {
+  game_state.upgrade_points
+}
+
+///|
+pub fn get_player_max_health() -> Int {
+  game_state.player_max_health
+}
+
+///|
+pub fn get_player_damage_multiplier() -> Double {
+  game_state.player_damage_multiplier
 }
 
 ///|
@@ -136,6 +185,7 @@ fn main {
   .add_system(enemy_ai_system, schedule=Update)
   .add_system(enemy_shooting_system, schedule=Update)
   .add_system(enemy_spawn_system, schedule=Update)
+  .add_system(update_health_system, schedule=Update)
   .add_system(input_system, schedule=Update)
   .add_system(@collision.area_collide_system, schedule=Update)
   .run()
@@ -159,6 +209,14 @@ fn game_start(_delta : Double) -> Unit {
 fn tick(_delta : Double) -> Unit {
   // Update game logic, clean up dead entities, etc.
   cleanup_dead_entities()
+
+  // Update player invulnerability timer
+  if game_state.player_invuln_timer > 0.0 {
+    game_state.player_invuln_timer = game_state.player_invuln_timer - _delta
+    if game_state.player_invuln_timer < 0.0 {
+      game_state.player_invuln_timer = 0.0
+    }
+  }
 
   // Debug: Print score when it changes
   if game_state.score > 0 {
@@ -341,9 +399,13 @@ fn enemy_ai_system(_delta : Double) -> Unit {
         // Determine enemy type based on sprite and use appropriate speed
         guard @sprite.sprites.get(enemy) is Some(_sprite) else { continue }
 
-        // Get the speed based on sprite type - for now, use default enemy speed
-        // Later we can add more sophisticated type detection
-        let speed = ENEMY_SPEED
+        // Get the speed based on enemy_info if present
+        let info_idx = find_enemy_info(enemy)
+        let speed = if info_idx >= 0 {
+          enemy_infos.val[info_idx].speed
+        } else {
+          ENEMY_SPEED
+        }
         let velocity = direction.normalize().scalar_mul(speed)
         @velocity.velocities.set(enemy, velocity)
       }
@@ -478,7 +540,9 @@ fn spawn_enemy_bullet(
       Some(player_collision_layer) {
       // Enemy bullet hit player - destroy bullet and damage player
       bullet.destroy()
-      damage_player()
+      // use Health component API to apply damage; source position is bullet position
+      guard @position.positions.get(bullet) is Some(bpos) else { return }
+      take_damage(target_entity, 1, Some(bpos.0))
     }
   })
   @collision.areas.set(bullet, hit_area)
@@ -540,16 +604,10 @@ fn spawn_bullet(
   hit_area.on_enter(fn(target_entity) {
     if @collision.collision_layers.get(target_entity) ==
       Some(enemy_collision_layer) {
-      // Bullet hit enemy - destroy both
+      // Bullet hit enemy - destroy bullet and apply damage via Health
       bullet.destroy()
-      target_entity.destroy()
-
-      // Create light at enemy position
-      guard @position.positions.get(target_entity) is Some(enemy_pos) else {
-        return
-      }
-      let light = spawn_light(enemy_pos.0)
-      game_state.lights.push(light)
+      guard @position.positions.get(bullet) is Some(bpos) else { return }
+      take_damage(target_entity, 1, Some(bpos.0))
     }
   })
   @collision.areas.set(bullet, hit_area)
@@ -589,6 +647,8 @@ fn spawn_enemy(position : @math.Vec2D) -> @system.Entity {
     offset=@math.Vec2D(-tile_size * 3.0, -tile_size * 3.0),
   )
   @sprite.sprites.set(enemy, sprite)
+  // add health component for basic enemy
+  add_health(enemy, 1)
 
   // Set up collision
   @collision.collision_layers.set(enemy, enemy_collision_layer)
@@ -675,6 +735,10 @@ fn spawn_shooter_enemy(position : @math.Vec2D) -> @system.Entity {
     offset=@math.Vec2D(-tile_size * 3.0, -tile_size * 3.0),
   )
   @sprite.sprites.set(enemy, sprite)
+  // add health for shooter enemy
+  add_health(enemy, 1)
+  // set enemy info speed for shooter
+  set_enemy_info(enemy, ENEMY_SHOOTER_SPEED)
 
   // Set up collision
   @collision.collision_layers.set(enemy, enemy_collision_layer)
@@ -718,6 +782,10 @@ fn spawn_kamikaze_enemy(position : @math.Vec2D) -> @system.Entity {
     offset=@math.Vec2D(-tile_size * 3.0, -tile_size * 3.0),
   )
   @sprite.sprites.set(enemy, sprite)
+  // add health for kamikaze enemy
+  add_health(enemy, 1)
+  // set enemy info speed for kamikaze
+  set_enemy_info(enemy, ENEMY_KAMIKAZE_SPEED)
 
   // Set up collision
   @collision.collision_layers.set(enemy, enemy_collision_layer)
@@ -729,22 +797,4 @@ fn spawn_kamikaze_enemy(position : @math.Vec2D) -> @system.Entity {
     ),
   )
   enemy
-}
-
-///|
-fn damage_player() -> Unit {
-  game_state.player_health -= 1
-  if game_state.player_health <= 0 {
-    // Player died - reset or game over
-    game_state.player_health = 3 // Reset to default health
-    game_state.score = 0
-    game_state.wave = 1
-
-    // Reset player position
-    guard game_state.player_entity is Some(player) else { return }
-    @position.positions.set(
-      player,
-      @math.Vec2D(REAL_VIEWPORT_WIDTH / 2.0, REAL_VIEWPORT_HEIGHT / 2.0),
-    )
-  }
 }
