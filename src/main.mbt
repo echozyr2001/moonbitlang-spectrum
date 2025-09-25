@@ -159,7 +159,8 @@ pub let light_collision_layer : @collision.CollisionLayer = @collision.Collision
 pub let enemy_bullet_collision_layer : @collision.CollisionLayer = @collision.CollisionLayer::new()
 
 ///|
-pub let player_ref : Ref[@system.Entity?] = { val: None }
+pub let player_ref : Ref[ @system.Entity?] = { val: None }
+
 
 ///|
 fn main {

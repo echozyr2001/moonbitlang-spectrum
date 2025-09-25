@@ -68,14 +68,10 @@ fn set_invulnerability(entity : @system.Entity, duration : Double) -> Unit {
       }
       health_components.val.set(entity, entry)
       entry = entry // Use mutability
-      println(
-        "set_invulnerability: entity=" +
-        entity.to_string() +
-        " dur=" +
-        duration.to_string(),
-      )
     }
-    None => ()
+    None => {
+      println("set_invuln: entity " + entity.to_string() + " not found in health_components")
+    }
   }
 }
 
@@ -85,6 +81,13 @@ fn take_damage(
   amount : Int,
   source_pos : @math.Vec2D?,
 ) -> Unit {
+  // Prioritize global player invulnerability as a workaround
+  guard game_state.player_entity is Some(pe) else { () }
+  if pe == entity && game_state.player_invuln_timer > 0.0 {
+    println("take_damage: ignored due to global player_invuln_timer")
+    return
+  }
+
   match health_components.val.get(entity) {
     Some(entry_val) => {
       let mut entry = entry_val
@@ -102,12 +105,6 @@ fn take_damage(
           "take_damage: ignored due per-entity invuln for entity=" +
           entity.to_string(),
         )
-        return
-      }
-      // also respect global player invulnerability (defensive)
-      guard game_state.player_entity is Some(pe) else { () }
-      if pe == entity && game_state.player_invuln_timer > 0.0 {
-        println("take_damage: ignored due to global player_invuln_timer")
         return
       }
 
@@ -233,12 +230,8 @@ pub fn game_start(_delta : Double) -> Unit {
   println(
     "game_start: player spawned, health=" + game_state.player_health.to_string(),
   )
-  // Give player a short invulnerability window to avoid instant death on spawn
-  set_invulnerability(p, 1.0)
-  println("game_start: player invulnerable for 1.0s")
 
-  // Initialize first wave after a short delay so the player has time to be invulnerable
-  // Increased to 1.0s to give a safer startup window
+  // Initialize first wave after a short delay
   @system.timeout(1.0, true, fn() { start_wave() })
   // Initialize UI layer
   @Scenes.init_scene_ui(0.0)
@@ -419,9 +412,11 @@ pub fn enemy_spawn_system(delta : Double) -> Unit {
     }
 
     // Prevent spawning enemies too close to the player (avoid instant collisions)
-    let safe_spawn_distance : Double = 80.0
+    let safe_spawn_distance : Double = 200.0
     guard game_state.player_entity is Some(player) else { () }
     if @position.positions.get(player) is Some(player_pos) {
+      println("spawn_enemy: player_pos: " + player_pos.0.to_string())
+      println("spawn_enemy: initial spawn_pos: " + spawn_pos.to_string())
       // If spawn_pos is within SAFE_SPAWN_DISTANCE of player, move it outwards
       let to_player = spawn_pos - player_pos.0
       let dx = to_player[X]
@@ -435,6 +430,7 @@ pub fn enemy_spawn_system(delta : Double) -> Unit {
         } else {
           player_pos.0 + to_player.normalize().scalar_mul(safe_spawn_distance)
         }
+        println("spawn_enemy: new spawn_pos: " + new_pos.to_string())
         spawn_pos = new_pos
       }
     }
