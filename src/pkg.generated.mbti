@@ -8,13 +8,19 @@ import(
 )
 
 // Values
-fn add_health(@system.Entity, Int) -> Unit
-
 let bullet_collision_layer : @collision.CollisionLayer
+
+fn enemy_ai_system(Double) -> Unit
 
 let enemy_bullet_collision_layer : @collision.CollisionLayer
 
 let enemy_collision_layer : @collision.CollisionLayer
+
+fn enemy_shooting_system(Double) -> Unit
+
+fn enemy_spawn_system(Double) -> Unit
+
+fn game_start(Double) -> Unit
 
 let game_state : GameState
 
@@ -30,17 +36,23 @@ fn get_upgrade_points() -> Int
 
 fn get_wave_enemies_spawned() -> Int
 
+fn input_system(Double) -> Unit
+
 let light_collision_layer : @collision.CollisionLayer
 
 let player_collision_layer : @collision.CollisionLayer
 
-fn set_enemy_info(@system.Entity, Double) -> Unit
+fn player_move_system(Double) -> Unit
+
+let player_ref : Ref[@system.Entity?]
+
+fn shooting_system(Double) -> Unit
 
 fn spawn_player(@math.Vec2D) -> @system.Entity
 
-fn take_damage(@system.Entity, Int, @math.Vec2D?) -> Unit
+fn tick(Double) -> Unit
 
-fn update_health_system(Double) -> Unit
+fn wave_management_system(Double) -> Unit
 
 // Errors
 
